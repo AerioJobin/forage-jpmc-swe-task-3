@@ -1,64 +1,80 @@
-import React, { Component } from 'react';
+import React, { Component, RefObject } from 'react';
 import { Table } from '@finos/perspective';
 import { ServerRespond } from './DataStreamer';
 import { DataManipulator } from './DataManipulator';
 import './Graph.css';
 
 interface IProps {
-  data: ServerRespond[],
+  data: ServerRespond[];
 }
 
-interface PerspectiveViewerElement extends HTMLElement {
-  load: (table: Table) => void,
-}
-class Graph extends Component<IProps, {}> {
-  table: Table | undefined;
+class Graph extends Component<IProps> {
+  private perspectiveViewerRef: RefObject<HTMLPerspectiveViewerElement>;
 
-  render() {
-    return React.createElement('perspective-viewer');
+  constructor(props: IProps) {
+    super(props);
+    this.perspectiveViewerRef = React.createRef();
   }
 
   componentDidMount() {
-    // Get element from the DOM.
-    const elem = document.getElementsByTagName('perspective-viewer')[0] as unknown as PerspectiveViewerElement;
-
-    const schema = {
-    price_abc: 'float',
-    price_def: 'float',
-    ratio: 'float',
-    timestamp: 'date',
-    upper_bound: 'float',
-    lower_bound: 'float',
-    trigger_alert: 'float',
-    };
-
-    if (window.perspective && window.perspective.worker()) {
-      this.table = window.perspective.worker().table(schema);
-    }
-    if (this.table) {
-      // Load the `table` in the `<perspective-viewer>` DOM reference.
-      elem.load(this.table);
-      elem.setAttribute('view', 'y_line');
-      elem.setAttribute('row-pivots', '["timestamp"]');
-      elem.setAttribute('columns', '["ratio", "lower_bound", "upper_bound", "trigger_alert"]');
-      elem.setAttribute('aggregates', JSON.stringify({
-      price_abc: 'avg',
-      price_def: 'avg',
-      ratio: 'avg',
-      timestamp: 'distinct count',
-      upper_bound: 'avg',
-      lower_bound: 'avg',
-      trigger_alert: 'avg',
-    }));
-    }
+    this.initializePerspectiveViewer();
   }
 
   componentDidUpdate() {
-    if (this.table) {
-      this.table.update([
-        DataManipulator.generateRow(this.props.data),
-      ] as unknown as TableData);
+    this.updatePerspectiveTable();
+  }
+
+  initializePerspectiveViewer() {
+    const schema = {
+      price_abc: 'float',
+      price_def: 'float',
+      ratio: 'float',
+      timestamp: 'date',
+      upper_bound: 'float',
+      lower_bound: 'float',
+      trigger_alert: 'float',
+    };
+
+    if (window.perspective && window.perspective.worker()) {
+      const table = window.perspective.worker().table(schema);
+      if (this.perspectiveViewerRef.current) {
+        this.perspectiveViewerRef.current.load(table);
+        this.setPerspectiveViewerAttributes();
+      }
     }
+  }
+
+  setPerspectiveViewerAttributes() {
+    if (this.perspectiveViewerRef.current) {
+      this.perspectiveViewerRef.current.setAttribute('view', 'y_line');
+      this.perspectiveViewerRef.current.setAttribute('row-pivots', '["timestamp"]');
+      this.perspectiveViewerRef.current.setAttribute('columns', '["ratio", "lower_bound", "upper_bound", "trigger_alert"]');
+      this.perspectiveViewerRef.current.setAttribute('aggregates', JSON.stringify({
+        price_abc: 'avg',
+        price_def: 'avg',
+        ratio: 'avg',
+        timestamp: 'distinct count',
+        upper_bound: 'avg',
+        lower_bound: 'avg',
+        trigger_alert: 'avg',
+      }));
+    }
+  }
+
+  updatePerspectiveTable() {
+    if (this.perspectiveViewerRef.current) {
+      const tableData = DataManipulator.generateRow(this.props.data);
+      const table = this.perspectiveViewerRef.current.table;
+      if (table) {
+        table.update([tableData]);
+      }
+    }
+  }
+
+  render() {
+    return (
+      <perspective-viewer ref={this.perspectiveViewerRef} className="perspective-viewer"></perspective-viewer>
+    );
   }
 }
 
